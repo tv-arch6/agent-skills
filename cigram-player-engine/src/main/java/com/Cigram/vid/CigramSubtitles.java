@@ -344,6 +344,9 @@ public final class CigramSubtitles {
         return sb.toString();
     }
 
+    /** hh:mm:ss.mmm, for diagnostics screens. */
+    public static String vttTimeOf(long ms) { return vttTime(ms); }
+
     static String vttTime(long ms) {
         long h = ms / 3600000L, m = (ms / 60000L) % 60, s = (ms / 1000L) % 60, f = ms % 1000L;
         return String.format(Locale.US, "%02d:%02d:%02d.%03d", h, m, s, f);
