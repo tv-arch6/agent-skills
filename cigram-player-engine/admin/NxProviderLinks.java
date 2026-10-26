@@ -27,7 +27,28 @@ final class NxProviderLinks {
         return c.getApplicationContext().getSharedPreferences("cigram_admin_providers", Context.MODE_PRIVATE);
     }
 
-    static String template(Context c, String id) { return prefs(c).getString(id + ".movie", ""); }
+    /** Patterns the owner already gave (from a real provider link); used until a template is saved on the device. */
+    private static String defaultTemplate(String id) {
+        return "vidbolt".equals(id) ? "https://vidbolt.pro/movie/{tmdb}" : "";
+    }
+
+    static String template(Context c, String id) { return prefs(c).getString(id + ".movie", defaultTemplate(id)); }
+
+    /**
+     * Accepts either a template ({tmdb} / {imdb}) or an example link of one movie copied from the provider, such as
+     * https://vidbolt.pro/movie/1400940: the TMDB number (or tt… IMDb id) in it becomes the placeholder.
+     * Returns "" when it cannot tell where the id is.
+     */
+    static String normalizeTemplate(String in) {
+        String t = in == null ? "" : in.trim();
+        if (templateOk(t)) return t;
+        if (!t.startsWith("https://") || t.indexOf('{') >= 0) return "";
+        java.util.regex.Matcher imdb = java.util.regex.Pattern.compile("^(https://[^?#]+?/)(tt\\d{5,10})(/?([?#].*)?)$").matcher(t);
+        if (imdb.matches()) return imdb.group(1) + "{imdb}" + imdb.group(3);
+        java.util.regex.Matcher tmdb = java.util.regex.Pattern.compile("^(https://[^?#]+?/)(\\d{1,10})(/?([?#].*)?)$").matcher(t);
+        if (tmdb.matches()) return tmdb.group(1) + "{tmdb}" + tmdb.group(3);
+        return "";
+    }
 
     /** https, a {tmdb} or {imdb} placeholder, no other placeholder. */
     static boolean templateOk(String t) {
@@ -85,14 +106,16 @@ final class NxProviderLinks {
             TextView edit = CgUi.smallButton(a, "القالب", 1);
             edit.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
-                    CgUi.input(a, "قالب رابط الفيلم — " + pr[1], "https://…/movie/{tmdb}", tpl, false, new CgUi.Callback<String>() {
+                    CgUi.input(a, "رابط فيلم من " + pr[1] + " (مثال) أو القالب", "https://…/movie/1400940", tpl, false, new CgUi.Callback<String>() {
                         @Override public void run(String value) {
-                            String t = value == null ? "" : value.trim();
-                            if (t.length() > 0 && !templateOk(t)) {
-                                CgUi.info(a, "قالب غير صالح", "يجب أن يبدأ بـ https:// ويحتوي {tmdb} أو {imdb} فقط، كما في توثيق المزوّد.");
+                            String raw = value == null ? "" : value.trim();
+                            String t = raw.length() == 0 ? "" : normalizeTemplate(raw);
+                            if (raw.length() > 0 && t.length() == 0) {
+                                CgUi.info(a, "لم أتعرّف على الرابط", "الصق رابط فيلم واحد من المزوّد ينتهي برقم TMDB (مثل https://vidbolt.pro/movie/1400940) أو قالباً فيه {tmdb}.");
                                 return;
                             }
                             prefs(a).edit().putString(pr[0] + ".movie", t).apply();
+                            if (t.length() > 0) CgUi.toast(a, "القالب: " + t);
                             rerender.run();
                         }
                     });
