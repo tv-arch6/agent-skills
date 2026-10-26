@@ -41,10 +41,20 @@ public final class CigramLibraryProvider extends CigramBaseProvider {
         if (target == null) return Collections.emptyList();
 
         String video = CigramLibraryItems.video(target);
-        if (video.length() == 0) return Collections.emptyList();
-
         // A series item itself carries no episode link; if it does, it must not be used for an episode.
         if (r.isEpisode() && CigramLibraryItems.isSeries(target) && !hasEpisodeIdentity(target)) return Collections.emptyList();
+
+        if (video.length() == 0) {
+            // published from the admin as «من المزوّد»: the provider's own player page, opened as an embed
+            String embed = CigramLibraryItems.text(target, "embed_url");
+            if (!embed.startsWith("https://")) return Collections.emptyList();
+            CigramPlaybackSource e = new CigramPlaybackSource();
+            e.playbackUri = embed;
+            e.markFailed(CigramPlaybackSource.EMBED_ONLY, "مشغّل المزوّد (صفحة تضمين).");
+            ArrayList<CigramPlaybackSource> one = new ArrayList<CigramPlaybackSource>();
+            one.add(e);
+            return one;
+        }
 
         CigramPlaybackSource s = new CigramPlaybackSource();
         s.playbackUri = CigramStreamLink.cleanUrl(video);

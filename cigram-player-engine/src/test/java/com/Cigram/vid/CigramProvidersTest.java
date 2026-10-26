@@ -297,4 +297,15 @@ public class CigramProvidersTest {
             assertEquals("https://player.example/movie/603", got[0].playbackUri);
         } finally { io.shutdownNow(); }
     }
+
+    @Test public void aMovieThatTheAdminLinkedToAProviderPlayerIsOfferedAsThatPlayer() throws Exception {
+        items.add(new JSONObject("{\"id\":\"m9\",\"type\":\"movie\",\"title\":\"x\",\"tmdb_id\":\"603\",\"video\":\"\",\"embed_url\":\"https://player.example/movie/603\"}"));
+        List<CigramPlaybackSource> r = new CigramLibraryProvider(library).resolve(movie(), new CigramCancel());
+        assertEquals(1, r.size());
+        assertEquals(CigramPlaybackSource.EMBED_ONLY, r.get(0).availability);
+        assertEquals("https://player.example/movie/603", r.get(0).playbackUri);
+        items.clear();
+        items.add(new JSONObject("{\"id\":\"m9\",\"type\":\"movie\",\"title\":\"x\",\"tmdb_id\":\"603\",\"embed_url\":\"http://insecure.example/603\"}"));
+        assertTrue(new CigramLibraryProvider(library).resolve(movie(), new CigramCancel()).isEmpty());
+    }
 }
