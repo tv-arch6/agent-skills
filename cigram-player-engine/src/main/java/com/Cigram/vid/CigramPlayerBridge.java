@@ -447,6 +447,11 @@ public final class CigramPlayerBridge {
             }
             @Override public void onReady(CigramMediaRequest r, CigramPlaybackSource chosen, List<CigramPlaybackSource> alts) {
                 if (released) return;
+                if (chosen.availability == CigramPlaybackSource.EMBED_ONLY) {
+                    toast("لا يوجد مصدر مباشر لهذه الحلقة؛ يُفتح مشغّل المزود.");
+                    try { CigramEmbedPlayerActivity.open(activity, chosen.playbackUri); } catch (Throwable ignored) { }
+                    return;
+                }
                 current = chosen;
                 alternates = new ArrayList<CigramPlaybackSource>(alts);
                 request = r;

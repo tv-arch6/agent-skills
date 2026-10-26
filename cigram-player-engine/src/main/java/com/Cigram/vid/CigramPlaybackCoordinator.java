@@ -253,6 +253,7 @@ public final class CigramPlaybackCoordinator {
         final ArrayList<CigramPlaybackSource> pending = new ArrayList<CigramPlaybackSource>();
         CigramCancel cancel = new CigramCancel();
         CigramPlaybackSource pinned;
+        CigramPlaybackSource embed;        // first provider-player page found; used only when no native source works
         int providerIndex;
         int fallbacks;
         volatile int state = IDLE;
@@ -286,6 +287,7 @@ public final class CigramPlaybackCoordinator {
                     if (!run.tried.add(s.sourceKey())) continue;
                     CigramSourceProvider owner = providerOf(s.providerId);
                     if (owner == null) continue;
+                    if (s.availability == CigramPlaybackSource.EMBED_ONLY) { if (run.embed == null) run.embed = s; continue; }
                     run.fallbacks++;
                     if (validate(run, owner, s, cancel)) { ready(run, s); return; }
                 }
@@ -299,6 +301,7 @@ public final class CigramPlaybackCoordinator {
                 Collections.sort(found, BY_PRIORITY);
                 run.pending.addAll(found);
             }
+            if (run.embed != null && !cancel.isCancelled()) { ready(run, run.embed); return; }
             fail(run, cancel);
         } catch (Throwable t) {
             CigramLog.w("coord", "run crashed", t);

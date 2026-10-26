@@ -251,4 +251,50 @@ public class CigramProvidersTest {
         assertFalse(a.identityKey().equals(d.identityKey()));
         assertFalse(a.identityKey().equals(movie().identityKey()));
     }
+
+    // ---------------------------------------------------------------- documented embed templates
+
+    @Test public void embedTemplateFromTheProvidersDocsGivesThePlayerPageOfExactlyThatEpisode() throws Exception {
+        config.put("provider.vidfast.embed.movie", "https://player.example/movie/{tmdb}");
+        config.put("provider.vidfast.embed.tv", "https://player.example/tv/{tmdb}/{season}/{episode}");
+        CigramJsonProvider p = new CigramJsonProvider("vidfast", "VidFast", 10, config, "note");
+        assertEquals(CigramSourceProvider.INTEGRATED, p.status());
+        CigramPlaybackSource m = p.resolve(movie(), new CigramCancel()).get(0);
+        assertEquals("https://player.example/movie/603", m.playbackUri);
+        assertEquals(CigramPlaybackSource.EMBED_ONLY, m.availability);
+        assertFalse(m.isPlayable);
+        assertEquals("https://player.example/tv/77/2/5", p.resolve(episode(2, 5), new CigramCancel()).get(0).playbackUri);
+    }
+
+    @Test public void badOrUnsafeTemplatesAreRefusedAndHostileIdsAreNotInserted() throws Exception {
+        assertFalse(CigramJsonProvider.embedOk("http://player.example/{tmdb}", false));
+        assertFalse(CigramJsonProvider.embedOk("https://player.example/x", false));
+        assertFalse(CigramJsonProvider.embedOk("https://player.example/{tmdb}/{unknown}", false));
+        assertFalse(CigramJsonProvider.embedOk("https://player.example/tv/{tmdb}", true));
+        config.put("provider.p.embed.movie", "https://player.example/movie/{tmdb}");
+        CigramJsonProvider p = new CigramJsonProvider("p", "P", 10, config, "note");
+        CigramMediaRef evil = new CigramMediaRef.Builder().kind(CigramMediaRef.MOVIE).tmdbId("1/../x").title("t").build();
+        assertTrue(p.resolve(CigramMediaRequest.movie(evil, null), new CigramCancel()).isEmpty());
+    }
+
+    @Test public void theCoordinatorUsesTheProviderPlayerOnlyWhenNoNativeSourceWorks() throws Exception {
+        config.put("provider.vidfast.embed.movie", "https://player.example/movie/{tmdb}");
+        java.util.ArrayList<CigramSourceProvider> list = new java.util.ArrayList<CigramSourceProvider>();
+        list.add(new CigramLibraryProvider(library));
+        list.add(new CigramJsonProvider("vidfast", "VidFast", 10, config, "note"));
+        java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newCachedThreadPool();
+        try {
+            CigramPlaybackCoordinator c = new CigramPlaybackCoordinator(list, io, CigramPoster.DIRECT);
+            final java.util.concurrent.CountDownLatch l = new java.util.concurrent.CountDownLatch(1);
+            final CigramPlaybackSource[] got = new CigramPlaybackSource[1];
+            c.play(movie(), new CigramPlaybackCoordinator.Listener() {
+                @Override public void onState(CigramMediaRequest r, int s, String m) { }
+                @Override public void onReady(CigramMediaRequest r, CigramPlaybackSource ch, List<CigramPlaybackSource> a) { got[0] = ch; l.countDown(); }
+                @Override public void onFailed(CigramMediaRequest r, String m, List<CigramPlaybackCoordinator.Report> rep, boolean x) { l.countDown(); }
+            });
+            assertTrue(l.await(10, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(CigramPlaybackSource.EMBED_ONLY, got[0].availability);
+            assertEquals("https://player.example/movie/603", got[0].playbackUri);
+        } finally { io.shutdownNow(); }
+    }
 }

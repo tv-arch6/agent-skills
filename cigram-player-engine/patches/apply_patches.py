@@ -108,6 +108,12 @@ MANIFEST_ADD = """
     android:windowSoftInputMode="adjustResize|stateHidden" />
 
 <activity
+    android:name="com.Cigram.vid.CigramEmbedPlayerActivity"
+    android:exported="false"
+    android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|uiMode"
+    android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+
+<activity
     android:name="com.Cigram.vid.CigramSubtitlePickActivity"
     android:exported="false"
     android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|uiMode"

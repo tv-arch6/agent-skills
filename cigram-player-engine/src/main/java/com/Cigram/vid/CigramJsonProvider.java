@@ -39,13 +39,15 @@ public class CigramJsonProvider extends CigramBaseProvider {
 
     @Override public int status() {
         if (!config.providerEnabled(id)) return DISABLED;
-        return apiBaseOk(config.providerApi(id)) ? INTEGRATED : NEEDS_API;
+        if (apiBaseOk(config.providerApi(id))) return INTEGRATED;
+        return embedConfigured() ? INTEGRATED : NEEDS_API;
     }
 
     @Override public String statusNote() {
         if (!config.providerEnabled(id)) return "متوقف من الإعدادات.";
         String api = config.providerApi(id);
-        if (api.length() == 0) return note + " لم يُضبط عنوان API مصرّح به لهذا المزود.";
+        if (api.length() == 0 && embedConfigured()) return "متكامل عبر مشغّل التضمين الرسمي للمزود (قالب الرابط من توثيقه).";
+        if (api.length() == 0) return note + " لم يُضبط عنوان API ولا قالب تضمين مصرّح به لهذا المزود.";
         if (!apiBaseOk(api)) return "عنوان الـ API يجب أن يكون https (المفتاح لا يُرسل عبر اتصال غير آمن).";
         return "متكامل عبر واجهة API مضبوطة.";
     }
@@ -87,7 +89,45 @@ public class CigramJsonProvider extends CigramBaseProvider {
         } catch (UnsupportedEncodingException impossible) { }
     }
 
+    // ---- documented embed player: the provider's own player page, filled from the template its documentation gives
+
+    /** Placeholders: {tmdb} {imdb} {season} {episode}. Keys: provider.&lt;id&gt;.embed.movie / provider.&lt;id&gt;.embed.tv */
+    public boolean embedConfigured() {
+        return embedOk(config.get("provider." + id + ".embed.movie", ""), false) || embedOk(config.get("provider." + id + ".embed.tv", ""), true);
+    }
+
+    static boolean embedOk(String t, boolean tv) {
+        if (t == null || !t.startsWith("https://")) return false;
+        String rest = t.replace("{tmdb}", "").replace("{imdb}", "").replace("{season}", "").replace("{episode}", "");
+        if (rest.indexOf('{') >= 0 || rest.indexOf('}') >= 0) return false;
+        if (!t.contains("{tmdb}") && !t.contains("{imdb}")) return false;
+        return !tv || (t.contains("{season}") && t.contains("{episode}"));
+    }
+
+    /** The embed page for exactly this movie / episode, or null when the template or the ids are missing. */
+    String embedUrl(CigramMediaRequest r) {
+        String t = config.get("provider." + id + ".embed." + (r.isEpisode() ? "tv" : "movie"), "");
+        if (!embedOk(t, r.isEpisode())) return null;
+        String tmdb = safeId(r.tmdbId), imdb = safeId(r.imdbId);
+        if ((t.contains("{tmdb}") && tmdb.length() == 0) || (t.contains("{imdb}") && imdb.length() == 0)) return null;
+        if (r.isEpisode() && (r.season < 0 || r.episode <= 0)) return null;
+        return t.replace("{tmdb}", tmdb).replace("{imdb}", imdb).replace("{season}", String.valueOf(r.season)).replace("{episode}", String.valueOf(r.episode));
+    }
+
+    private static String safeId(String s) { return s != null && s.matches("[A-Za-z0-9]{1,20}") ? s : ""; }
+
     @Override protected List<CigramPlaybackSource> doResolve(CigramMediaRequest r, CigramCancel cancel) throws CigramEngineException {
+        if (!apiBaseOk(config.providerApi(id))) {
+            ArrayList<CigramPlaybackSource> one = new ArrayList<CigramPlaybackSource>();
+            String url = embedUrl(r);
+            if (url != null) {
+                CigramPlaybackSource s = new CigramPlaybackSource();
+                s.playbackUri = url;
+                s.markFailed(CigramPlaybackSource.EMBED_ONLY, "مشغّل المزود الرسمي (صفحة تضمين).");
+                one.add(s);
+            }
+            return one;
+        }
         CigramHttp.Request req = new CigramHttp.Request(buildUrl(r)).header("Accept", "application/json").max(256 * 1024).timeouts(8000, 12000);
         String token = config.providerToken(id);
         if (token.length() > 0) req.header("Authorization", "Bearer " + token);

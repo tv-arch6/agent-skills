@@ -77,6 +77,12 @@ public final class CigramWatchNow {
                 dismiss();
                 Activity act = ref.get();
                 if (act == null || act.isFinishing()) return;
+                if (chosen.availability == CigramPlaybackSource.EMBED_ONLY) {
+                    // no native source: the provider's own documented player. Its page, not the app's controls, drives it.
+                    Toast.makeText(act, "يُشغَّل عبر مشغّل المزود (أزرار التطبيق لا تتحكم به)", Toast.LENGTH_LONG).show();
+                    try { CigramEmbedPlayerActivity.open(act, chosen.playbackUri); } catch (Throwable t) { Toast.makeText(act, "تعذر فتح المشغّل", Toast.LENGTH_SHORT).show(); }
+                    return;
+                }
                 CigramPlayerBridge.seed(r, chosen, alternates);
                 try {
                     JSONObject patched = new JSONObject(source.toString());
