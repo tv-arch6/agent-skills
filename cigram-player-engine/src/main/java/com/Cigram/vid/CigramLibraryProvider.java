@@ -63,6 +63,17 @@ public final class CigramLibraryProvider extends CigramBaseProvider {
         if (sub.length() > 0) s.supportedSubtitles.add(new CigramPlaybackSource.Subtitle(sub, "ar", "العربية", true));
         ArrayList<CigramPlaybackSource> out = new ArrayList<CigramPlaybackSource>();
         out.add(s);
+        // more direct links of the same movie / episode saved by the admin («من المزوّد»): tried in order when one fails
+        for (String line : CigramLibraryItems.text(target, "video_backups").split("\n")) {
+            String b = line.trim();
+            if (!b.startsWith("https://") && !b.startsWith("http://")) continue;
+            CigramPlaybackSource alt = new CigramPlaybackSource();
+            alt.playbackUri = CigramStreamLink.cleanUrl(b);
+            alt.headers.putAll(CigramStreamLink.headersOf(b));
+            alt.displayName = "مصدر احتياطي";
+            out.add(alt);
+            if (out.size() >= 9) break;
+        }
         return out;
     }
 

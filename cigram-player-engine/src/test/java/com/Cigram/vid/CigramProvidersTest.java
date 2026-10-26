@@ -308,4 +308,54 @@ public class CigramProvidersTest {
         items.add(new JSONObject("{\"id\":\"m9\",\"type\":\"movie\",\"title\":\"x\",\"tmdb_id\":\"603\",\"embed_url\":\"http://insecure.example/603\"}"));
         assertTrue(new CigramLibraryProvider(library).resolve(movie(), new CigramCancel()).isEmpty());
     }
+
+    @Test public void backupLinksSavedByTheAdminAreOfferedAfterTheMainLinkInOrder() throws Exception {
+        items.add(new JSONObject("{\"id\":\"m5\",\"type\":\"movie\",\"title\":\"x\",\"tmdb_id\":\"603\",\"video\":\"https://a.example/main.m3u8\","
+                + "\"video_backups\":\"https://b.example/b1.mp4\\nnot a link\\nhttps://c.example/b2.m3u8|Referer=https%3A%2F%2Fc.example%2F\"}"));
+        List<CigramPlaybackSource> r = new CigramLibraryProvider(library).resolve(movie(), new CigramCancel());
+        assertEquals(3, r.size());
+        assertEquals("https://a.example/main.m3u8", r.get(0).playbackUri);
+        assertEquals("https://b.example/b1.mp4", r.get(1).playbackUri);
+        assertEquals("https://c.example/b2.m3u8", r.get(2).playbackUri);
+        assertEquals("https://c.example/", r.get(2).headers.get("Referer"));
+        assertTrue(r.get(1).priority < r.get(2).priority);
+    }
+
+    @Test public void whenTheMainLinkFailsInThePlayerTheNextBackupOfTheSameMoviePlays() throws Exception {
+        items.add(new JSONObject("{\"id\":\"m5\",\"type\":\"movie\",\"title\":\"x\",\"tmdb_id\":\"603\",\"video\":\"https://a.example/main.m3u8\","
+                + "\"video_backups\":\"https://b.example/b1.mp4\"}"));
+        CigramLibraryProvider lib = new CigramLibraryProvider(library);
+        java.util.ArrayList<CigramSourceProvider> list = new java.util.ArrayList<CigramSourceProvider>();
+        list.add(new CigramBaseProviderWrapper(lib));
+        java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newCachedThreadPool();
+        try {
+            CigramPlaybackCoordinator c = new CigramPlaybackCoordinator(list, io, CigramPoster.DIRECT);
+            final java.util.concurrent.CountDownLatch l = new java.util.concurrent.CountDownLatch(1);
+            final CigramPlaybackSource[] got = new CigramPlaybackSource[1];
+            // the player failed on the main link: exclude it, as CigramPlayerBridge does
+            c.play(movie(), new CigramPlaybackCoordinator.Listener() {
+                @Override public void onState(CigramMediaRequest r, int s, String m) { }
+                @Override public void onReady(CigramMediaRequest r, CigramPlaybackSource ch, List<CigramPlaybackSource> a) { got[0] = ch; l.countDown(); }
+                @Override public void onFailed(CigramMediaRequest r, String m, List<CigramPlaybackCoordinator.Report> rep, boolean x) { l.countDown(); }
+            }, "library|https://a.example/main.m3u8");
+            assertTrue(l.await(10, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals("https://b.example/b1.mp4", got[0].playbackUri);
+        } finally { io.shutdownNow(); }
+    }
+
+    /** Library provider whose validation says yes to everything (no network in this test). */
+    static final class CigramBaseProviderWrapper implements CigramSourceProvider {
+        final CigramLibraryProvider inner;
+        CigramBaseProviderWrapper(CigramLibraryProvider p) { inner = p; }
+        @Override public String id() { return inner.id(); }
+        @Override public String displayName() { return inner.displayName(); }
+        @Override public int priority() { return inner.priority(); }
+        @Override public int status() { return inner.status(); }
+        @Override public String statusNote() { return inner.statusNote(); }
+        @Override public boolean supports(CigramMediaRequest r) { return inner.supports(r); }
+        @Override public List<String> search(String t, String c, int s, int e, CigramCancel x) { return new java.util.ArrayList<String>(); }
+        @Override public List<CigramPlaybackSource> resolve(CigramMediaRequest r, CigramCancel x) throws CigramEngineException { return inner.resolve(r, x); }
+        @Override public CigramSourceValidator.Result validate(CigramPlaybackSource s, CigramCancel x) { return CigramSourceValidator.Result.ok("hls", "x"); }
+        @Override public void cancel(String id) { inner.cancel(id); }
+    }
 }
